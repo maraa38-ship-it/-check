@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>의원 수행 실시간 체크</title>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Malgun Gothic", sans-serif;
+    background: #f4f5f7;
+    margin: 0;
+    padding: 12px;
+    color: #111827;
+  }
+  h1 {
+    font-size: 18px;
+    margin: 0 0 12px 0;
+  }
+  .top-bar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 12px;
+  }
+  select, input[type="text"] {
+    padding: 8px 10px;
+    border: 1px solid #d1d5db;
+    border-radius: 6px;
+    font-size: 14px;
+    flex: 1;
+    min-width: 120px;
+  }
+  .stats {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 6px;
+    margin-bottom: 12px;
+  }
+  .stat-card {
+    background: white;
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+    padding: 8px 4px;
+    text-align: center;
+  }
+  .stat-card .num { font-size: 18px; font-weight: 700; }
+  .stat-card .label { font-size: 11px; color: #6b7280; margin-top: 2px; }
+
+  .card {
+    background: white;
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+    padding: 10px 12px;
+    margin-bottom: 8px;
+  }
+  .card-top {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 8px;
+  }
+  .name { font-size: 15px; font-weight: 600; }
+  .meta { font-size: 11px; color: #6b7280; }
+  .btn-row { display: flex; gap: 6px; }
+  .btn {
+    flex: 1;
+    padding: 8px 0;
+    border-radius: 6px;
+    border: 1px solid #d1d5db;
+    background: #f9fafb;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  .btn.car1.active { background: #2563eb; color: white; border-color: #2563eb; }
+  .btn.car2.active { background: #059669; color: white; border-color: #059669; }
+  .btn.carx.active { background: #dc2626; color: white; border-color: #dc2626; }
+
+  .badge {
+    font-size: 11px;
+    padding: 2px 8px;
+    border-radius: 4px;
+    background: #f3f4f6;
+    color: #374151;
+  }
+  .badge.car1 { background: #dbeafe; color: #1d4ed8; }
+  .badge.car2 { background: #d1fae5; color: #047857; }
+  .badge.carx { background: #fee2e2; color: #b91c1c; }
+</style>
+</head>
+<body>
+
+<h1>의원 수행 실시간 체크 (45명 / 5명 분담)</h1>
+
+<div class="top-bar">
+  <select id="myStaff">
+    <option value="">내 이름 선택</option>
+    <option value="영돈">영돈</option>
+    <option value="용훈">용훈</option>
+    <option value="해나">해나</option>
+    <option value="경진">경진</option>
+    <option value="소희">소희</option>
+  </select>
+  <input type="text" id="search" placeholder="의원 이름 검색">
+</div>
+
+<div class="stats">
+  <div class="stat-card"><div class="num" id="statTotal">-</div><div class="label">전체</div></div>
+  <div class="stat-card"><div class="num" id="statCar1">-</div><div class="label">1호차</div></div>
+  <div class="stat-card"><div class="num" id="statCar2">-</div><div class="label">2호차</div></div>
+  <div class="stat-card"><div class="num" id="statX">-</div><div class="label">X</div></div>
+  <div class="stat-card"><div class="num" id="statNone">-</div><div class="label">미정</div></div>
+</div>
+
+<div id="list"></div>
+
+<script>
+  // 여기에 Apps Script 배포 후 나오는 웹앱 URL을 붙여넣으세요
+  const WEBAPP_URL = "https://script.google.com/macros/s/AKfycbwvh4x8YxFaEGTVXUgNWT6EbF82wvV2APIcGTYwypVbSYYfqO4GezIUdlrI8fm5RhHmqw/exec";
+
+  let allData = [];
+
+  async function loadData() {
+    try {
+      const res = await fetch(WEBAPP_URL);
+      const json = await res.json();
+      allData = json.members;
+      render();
+    } catch (err) {
+      document.getElementById('list').innerHTML =
+        '<p style="color:#b91c1c">데이터를 불러오지 못했습니다. WEBAPP_URL 설정을 확인하세요.</p>';
+    }
+  }
+
+  function render() {
+    const keyword = document.getElementById('search').value.trim();
+    const filtered = keyword
+      ? allData.filter(m => m.name.includes(keyword))
+      : allData;
+
+    const list = document.getElementById('list');
+    list.innerHTML = filtered.map(m => {
+      return `
+        <div class="card">
+          <div class="card-top">
+            <div>
+              <span class="name">${m.name}</span>
+              ${statusBadge(m.status)}
+            </div>
+            <div class="meta">${m.staff ? '담당: ' + m.staff : ''}</div>
+          </div>
+          <div class="btn-row">
+            <button class="btn car1 ${m.status === '1호차' ? 'active' : ''}" onclick="setStatus(${m.no}, '1호차')">1호차</button>
+            <button class="btn car2 ${m.status === '2호차' ? 'active' : ''}" onclick="setStatus(${m.no}, '2호차')">2호차</button>
+            <button class="btn carx ${m.status === 'X' ? 'active' : ''}" onclick="setStatus(${m.no}, 'X')">X</button>
+          </div>
+        </div>
+      `;
+    }).join('');
+
+    updateStats();
+  }
+
+  function statusBadge(status) {
+    if (status === '1호차') return '<span class="badge car1">1호차</span>';
+    if (status === '2호차') return '<span class="badge car2">2호차</span>';
+    if (status === 'X') return '<span class="badge carx">X</span>';
+    return '<span class="badge">미정</span>';
+  }
+
+  function updateStats() {
+    const total = allData.length;
+    const car1 = allData.filter(m => m.status === '1호차').length;
+    const car2 = allData.filter(m => m.status === '2호차').length;
+    const x = allData.filter(m => m.status === 'X').length;
+    const none = total - car1 - car2 - x;
+
+    document.getElementById('statTotal').textContent = total;
+    document.getElementById('statCar1').textContent = car1;
+    document.getElementById('statCar2').textContent = car2;
+    document.getElementById('statX').textContent = x;
+    document.getElementById('statNone').textContent = none;
+  }
+
+  async function setStatus(no, status) {
+    const staff = document.getElementById('myStaff').value;
+    if (!staff) {
+      alert('먼저 상단에서 본인 이름을 선택해주세요.');
+      return;
+    }
+    // 화면에 즉시 반영 (낙관적 업데이트)
+    const target = allData.find(m => m.no === no);
+    if (target) {
+      target.staff = staff;
+      target.status = status;
+    }
+    render();
+
+    try {
+      await fetch(WEBAPP_URL, {
+        method: 'POST',
+        body: JSON.stringify({ no: no, staff: staff, status: status })
+      });
+    } catch (err) {
+      alert('저장 중 오류가 발생했습니다. 네트워크를 확인하세요.');
+    }
+  }
+
+  document.getElementById('search').addEventListener('input', render);
+
+  loadData();
+  setInterval(loadData, 5000); // 5초마다 자동 동기화
+</script>
+
+</body>
+</html>
